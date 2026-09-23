@@ -1,0 +1,91 @@
+server:
+  port: 8080
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8181/realms/ecom-app
+  cloud:
+#    gateway:
+#     server:
+#       webflux:
+#         routes:
+#           - id: product-service
+#             uri: lb://PRODUCT-SERVICE
+#             predicates:
+#               - Path=/api/products/**
+#           - id: user-service
+#             uri: lb://USER-SERVICE
+#             predicates:
+#               - Path=/api/users/**
+#           - id: order-service
+#             uri: lb://ORDER-SERVICE
+#             predicates:
+#               - Path=/api/orders/**,/api/cart/**
+#           - id: eureka
+#             uri: http://localhost:8761
+#             predicates:
+#               - Path=/eureka/main
+#             filters:
+#              - SetPath=/
+#           - id: eureka-static
+#             uri: http://localhost:8761
+#             predicates:
+#               - Path=/eureka/**
+    circuitbreaker:
+      resilience4j:
+        enabled: true
+
+#logging:
+#  level:
+#    root: info
+#    org.springframework.cloud.gateway.route.RouteDefinitionLocator: info
+#    org.springframework.cloud.gateway: trace
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+  health:
+    circuitbreakers:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      ecomBreaker:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        slidingWindowType: COUNT_BASED
+
+eureka:
+  url: http://localhost:8761
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: product-service
+        url: /aggregate/product-service/v3/api-docs
+      - name: user-service
+        url: /aggregate/user-service/v3/api-docs
+      - name: order-service
+        url: /aggregate/order-service/v3/api-docs

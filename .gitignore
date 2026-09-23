@@ -1,0 +1,24 @@
+# Secrets
+deploy/docker/.env
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+
+# Java build output
+**/target/
+*.jar
+*.war
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Application logs
+**/logs/
+*.log
+
+# Local runtime data
+**/.data/

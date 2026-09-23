@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: user-service
+  mongodb:
+      uri: ${MONGO_URI}
+#  datasource:
+#    url: jdbc:postgresql://localhost:5433/userdb
+#    username: ${USER_DB_USER}
+#    password: ${USER_DB_PASSWORD}
+#  jpa:
+#    show-sql: true
+#    hibernate:
+#      ddl-auto: update
+#    database: postgresql
+#    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+server:
+  port: 8082
+
+logging:
+  level:
+    org:
+      springframework:
+        boot:
+          autoconfigure:
+            logging=DEBUG:
+  file:
+    name: logs/${spring.application.name}.log
+  logback:
+    rollingpolicy:
+      max-history: 7
+      max-file-size: 5MB
+
+management:
+  health:
+    mongodb:
+      enabled: false
+  tracing:
+    sampling:
+      probability: 1.0
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+
+
