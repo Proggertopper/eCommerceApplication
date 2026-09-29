@@ -14,9 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -47,13 +45,13 @@ public class CartService {
         if(existingCartItem  != null){
             // Updating Quantity
             existingCartItem.setQuantity(existingCartItem.getQuantity() + cartItemRequest.getQuantity());
-            existingCartItem.setPrice(new BigDecimal(1000));
+            existingCartItem.setPrice(productResponse.getPrice());
             cartItemRepository.save(existingCartItem);
         } else {
             CartItem cartItem = new CartItem();
             cartItem.setUserId(userId);
             cartItem.setProductId(cartItemRequest.getProductId());
-            cartItem.setPrice(new BigDecimal(1000));
+            cartItem.setPrice(productResponse.getPrice());
             cartItem.setQuantity(cartItemRequest.getQuantity());
             cartItemRepository.save(cartItem);
         }

@@ -227,7 +227,7 @@ GitHub Actions runs `mvn -B clean verify` on pushes to `main`/`master` and on pu
 This is an educational, backend-only portfolio project rather than a production e-commerce product. The next changes that would most improve production readiness are:
 
 - Add Flyway or Liquibase migrations and remove Hibernate schema creation from runtime setup.
-- Automate Keycloak realm import and provide a committed `.env.example` with non-sensitive defaults.
+- Automate the Keycloak realm import for a fully reproducible local setup.
 - Add integration tests with Testcontainers for PostgreSQL, MySQL, MongoDB, Kafka, and Keycloak.
 - Derive `X-User-ID` from the authenticated JWT instead of accepting it as a client-supplied header.
 - Add stock reservation, idempotency, and transactional/outbox handling around checkout.
