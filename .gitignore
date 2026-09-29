@@ -5,6 +5,7 @@ deploy/docker/.env
 !.env.example
 **/.env
 **/.env.*
+!deploy/docker/.env.example
 
 # Java build output
 **/target/

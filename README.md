@@ -1,180 +1,188 @@
-# eCommerce Microservices
+# eCommerce Microservices Platform
 
-Spring Cloud based eCommerce backend built as a set of independent services. The project is focused on practicing real microservice infrastructure: centralized configuration, service discovery, API gateway routing, authentication, async events, databases per service, observability, Docker Compose, and CI.
+> A backend-focused e-commerce system built to practise the design and operation of a production-style Java microservices architecture: independently deployable services, API gateway, centralized configuration, service discovery, identity management, asynchronous events, observability, and container orchestration.
 
-## Tech Stack
+## Highlights
 
-- Java 21
-- Spring Boot 3
-- Spring Cloud Config
-- Spring Cloud Gateway WebFlux
-- Netflix Eureka
-- Spring Security OAuth2 Resource Server
-- Keycloak
-- PostgreSQL, MySQL, MongoDB
-- Kafka and Spring Cloud Stream
-- RabbitMQ / Spring Cloud Bus
-- Redis rate limiting
-- Resilience4j circuit breaker
-- Micrometer, Prometheus, Zipkin, Grafana/Loki configs
-- Docker Compose
-- Kubernetes manifests
-- Maven multi-module build
-- GitHub Actions CI
+- **Seven Spring Boot services** built as a single Maven multi-module repository.
+- **Database per service**: PostgreSQL for products, MongoDB for users, and MySQL for carts and orders.
+- **Spring Cloud Gateway** provides routing, JWT validation, Redis-backed rate limiting, a Resilience4j circuit breaker, and aggregated Swagger UI.
+- **Keycloak integration** for OAuth2/OIDC authentication and programmatic user provisioning.
+- **Event-driven order flow**: the order service publishes an `OrderCreatedEvent` to Kafka through Spring Cloud Stream; the notification service consumes it.
+- **Operational tooling**: Actuator, Prometheus metrics endpoints, Micrometer tracing to Zipkin, Docker Compose, Kubernetes manifests, and a GitHub Actions verification workflow.
 
 ## Architecture
 
-```text
-Client
-  |
-  v
-API Gateway :8080
-  |-- /api/products/** -> product-service :8081 -> PostgreSQL
-  |-- /api/users/**    -> user-service    :8082 -> MongoDB + Keycloak Admin API
-  |-- /api/orders/**   -> order-service   :8083 -> MySQL
-  |-- /api/cart/**     -> order-service   :8083 -> MySQL
-  |
-  |-- Swagger UI aggregation
-  |-- OAuth2/JWT validation
-  |-- Redis rate limiting
-  |-- Resilience4j circuit breaker
-
-Config Server :8888 -> centralized service configuration
-Eureka        :8761 -> service discovery
-Kafka               -> order created events
-notification-service :8084 -> consumes order events
-Zipkin        :9411 -> distributed tracing
-Prometheus/Grafana  -> metrics experiments under additional/
+```mermaid
+flowchart TB
+    Client[Client / API consumer] --> Gateway[API Gateway :8080]
+    Gateway --> Product[Product service]
+    Gateway --> User[User service]
+    Gateway --> Order[Order service]
+    Product --> PostgreSQL[(PostgreSQL)]
+    User --> MongoDB[(MongoDB)]
+    Order --> MySQL[(MySQL)]
+    Order --> Kafka[Kafka]
+    Kafka --> Notification[Notification service]
+    Config[Config Server] --> Product
+    Config --> User
+    Config --> Order
+    Discovery[Eureka] --- Gateway
+    Discovery --- Product
+    Discovery --- User
+    Discovery --- Order
 ```
 
-## Services
+### Services
 
-| Service | Port | Purpose |
-| --- | ---: | --- |
-| configserver | 8888 | Centralized native Spring Cloud Config server |
-| eureka | 8761 | Service discovery registry |
-| gateway | 8080 | API Gateway, OAuth2 resource server, routing, rate limiting, Swagger aggregation |
-| product-service | 8081 | Product catalog backed by PostgreSQL |
-| user-service | 8082 | User API backed by MongoDB and integrated with Keycloak |
-| order-service | 8083 | Cart and order API backed by MySQL, publishes order events to Kafka |
-| notification | 8084 | Kafka consumer for order events |
+| Service | Port | Responsibility | Main integrations |
+| --- | ---: | --- | --- |
+| `configserver` | 8888 | Serves centralized, profile-specific configuration from the native config repository | Spring Cloud Config, Spring Cloud Bus / RabbitMQ |
+| `eureka` | 8761 | Service registry and discovery | Netflix Eureka |
+| `gateway` | 8080 | Public API entry point, route aggregation and cross-cutting concerns | Spring Cloud Gateway, OAuth2 Resource Server, Redis, Resilience4j, OpenAPI |
+| `product` | 8081 | Product catalog and search API | Spring Data JPA, PostgreSQL |
+| `user` | 8082 | User profile API and identity provisioning | Spring Data MongoDB, Keycloak Admin REST API |
+| `order` | 8083 | Shopping cart and order creation workflow | Spring Data JPA, MySQL, load-balanced `RestClient`, Spring Cloud Stream / Kafka |
+| `notification` | 8084 | Consumes order-created events | Spring Cloud Stream / Kafka |
 
-## Main API Routes
+## Order flow
 
-Gateway routes:
+1. A client creates a cart item through the gateway and passes `X-User-ID`.
+2. `order-service` resolves the requested product and user through service discovery and a load-balanced Spring `RestClient`.
+3. The cart is persisted in MySQL.
+4. On checkout, the service validates the cart and user, persists an order with its order items, clears the cart, and publishes `OrderCreatedEvent` through `StreamBridge`.
+5. `notification-service` consumes the Kafka event and logs the notification action.
 
-- `GET /api/products`
-- `GET /api/products/{id}`
-- `GET /api/products/search?keyword=...`
-- `POST /api/products`
-- `PUT /api/products/{id}`
-- `DELETE /api/products/{id}`
-- `GET /api/users`
-- `GET /api/users/{id}`
-- `POST /api/users`
-- `PUT /api/users/{id}`
-- `GET /api/cart`
-- `POST /api/cart`
-- `DELETE /api/cart/items/{productId}`
-- `POST /api/orders`
+## Tech stack
 
-The order and cart endpoints expect the user id in the `X-User-ID` header.
+| Area | Technologies |
+| --- | --- |
+| Language & build | Java 21, Maven multi-module build |
+| Framework | Spring Boot 3.5.7, Spring Cloud 2025.0.0 |
+| Cloud patterns | Config Server, Netflix Eureka, Gateway, Spring Cloud Stream, Spring Cloud Bus |
+| Security | Spring Security OAuth2 Resource Server, Keycloak (OIDC/JWT) |
+| Data | Spring Data JPA, Spring Data MongoDB, PostgreSQL 16, MySQL 8 |
+| Messaging & cache | Kafka, RabbitMQ, Redis |
+| Resilience | Resilience4j circuit breaker and retry |
+| Observability | Actuator, Micrometer, Prometheus, Zipkin, Grafana/Loki experiment configs |
+| Documentation | Springdoc OpenAPI / Swagger UI |
+| Deployment | Docker Compose, Kubernetes YAML (Minikube/Kind-ready) |
+| Quality | JUnit 5, Mockito, AssertJ, GitHub Actions CI |
 
-## Swagger / OpenAPI
+## API overview
 
-OpenAPI documentation is generated at runtime by `springdoc-openapi`.
+All application endpoints are exposed through the gateway at `http://localhost:8080` once the environment is configured. The gateway protects application routes with a JWT; Swagger-related endpoints are public.
 
-Each REST service exposes its own OpenAPI JSON:
+| Area | Gateway route | Operations |
+| --- | --- | --- |
+| Products | `/api/products` | Create, list, fetch by ID, update, soft-delete, and keyword search |
+| Users | `/api/users` | Create, list, fetch by ID, and update user profiles; creation provisions the identity in Keycloak |
+| Cart | `/api/cart` | Add, list, and remove cart items |
+| Orders | `/api/orders` | Create an order from the current cart and publish an event |
 
-- product-service: `http://localhost:8081/v3/api-docs`
-- user-service: `http://localhost:8082/v3/api-docs`
-- order-service: `http://localhost:8083/v3/api-docs`
+Cart and order requests require an `X-User-ID` request header. For example:
 
-The gateway exposes one aggregated Swagger UI:
+```bash
+curl --request POST http://localhost:8080/api/cart \
+  --header "Authorization: Bearer <access-token>" \
+  --header "X-User-ID: <mongo-user-id>" \
+  --header "Content-Type: application/json" \
+  --data '{"productId":"1","quantity":2}'
+```
 
-- `http://localhost:8080/swagger-ui/index.html`
+## OpenAPI
 
-Gateway aggregation works through these routes:
+The gateway aggregates the REST services' OpenAPI specifications.
 
-- `/aggregate/product-service/v3/api-docs` -> `product-service /v3/api-docs`
-- `/aggregate/user-service/v3/api-docs` -> `user-service /v3/api-docs`
-- `/aggregate/order-service/v3/api-docs` -> `order-service /v3/api-docs`
+- Gateway Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- Product docs: `http://localhost:8081/v3/api-docs`
+- User docs: `http://localhost:8082/v3/api-docs`
+- Order docs: `http://localhost:8083/v3/api-docs`
 
-The list of Swagger UI entries is configured in `configserver/src/main/resources/config/gateway-service.yml` under `springdoc.swagger-ui.urls`.
+## Run locally
 
-## Local Docker Start
+### Prerequisites
 
-Create a local env file from the example:
+- JDK 21
+- Maven 3.9+
+- Docker Engine with Docker Compose v2
+- At least 6 GB of available Docker memory is recommended because Kafka, Keycloak, databases, and the Spring services run together.
+
+> **Important:** the checked-in Maven wrapper scripts do not include the `.mvn/wrapper` files, so use a locally installed Maven command (`mvn`) at the moment.
+
+### 1. Prepare environment variables
+
+Copy the committed template, then replace every `change_me_*` value before using the environment anywhere outside local development:
 
 ```bash
 cp deploy/docker/.env.example deploy/docker/.env
 ```
 
-Build all service jars:
+`KEYCLOAK_CLIENT_UID` is the ID of the `oauth2-pkce` client in the included realm export. If you create the client yourself instead of importing the export, replace it with the UUID shown in Keycloak.
 
-```bash
-mvn clean package
-```
+### 2. Build application JARs
 
-Start infrastructure and services:
-
-```bash
-cd deploy/docker
-docker compose up -d --build
-```
-
-Useful local URLs:
-
-- Gateway: `http://localhost:8080`
-- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- Eureka UI: `http://localhost:8761`
-- Keycloak: `http://localhost:8181`
-- RabbitMQ Management UI: `http://localhost:15672`
-- pgAdmin: `http://localhost:5050`
-- Zipkin: `http://localhost:9411`
-
-## Maven Build
-
-The root `pom.xml` is a Maven aggregator for all services:
-
-```bash
-mvn clean verify
-```
-
-Run tests only:
-
-```bash
-mvn test
-```
-
-## CI
-
-GitHub Actions workflow is located at `.github/workflows/ci.yml`.
-
-It runs on pushes and pull requests, installs Java 21, caches Maven dependencies, and executes:
+Run from the repository root:
 
 ```bash
 mvn -B clean verify
 ```
 
-This gives the repository a basic quality gate: every commit must compile all modules and pass all tests.
+The Dockerfiles expect the resulting JAR in each service's `target/` directory.
+
+### 3. Start the stack
+
+```bash
+cd deploy/docker
+docker compose up -d --build
+docker compose ps
+```
+
+Useful local endpoints:
+
+| Component | URL |
+| --- | --- |
+| API Gateway | `http://localhost:8080` |
+| Swagger UI | `http://localhost:8080/swagger-ui/index.html` |
+| Eureka dashboard | `http://localhost:8761` |
+| Keycloak | `http://localhost:8181` |
+| RabbitMQ Management | `http://localhost:15672` |
+| pgAdmin | `http://localhost:5050` |
+| Zipkin | `http://localhost:9411` |
+
+Follow startup logs when diagnosing a dependency issue:
+
+```bash
+docker compose logs -f config-server eureka product user order gateway notification
+```
+
+### 4. Import the Keycloak realm
+
+After Keycloak becomes available:
+
+1. Sign in to `http://localhost:8181` with `KEYCLOAK_ADMIN_USERNAME` and `KEYCLOAK_ADMIN_PASSWORD`.
+2. Import `additional/keycloak/keycloak-backups/realm-export-ecom-app.json`.
+3. Verify that the `ecom-app` realm and the `oauth2-pkce` client exist.
+4. Use an access token issued by that realm when calling gateway application routes.
+
+### Stop and reset
+
+```bash
+docker compose down
+```
+
+To also remove the local database and broker volumes (destructive):
+
+```bash
+docker compose down -v
+```
 
 ## Kubernetes
 
-Local Kubernetes manifests are located in `deploy/k8s`.
-
-They include:
-
-- namespace
-- demo secrets and shared config map
-- infrastructure deployments and services
-- application deployments and services
-- readiness/liveness probes for core services
-
-Quick start:
+Local deployment manifests are in [`deploy/k8s`](deploy/k8s). They cover a namespace, demo secrets and ConfigMap, infrastructure services, application deployments, services, and health probes.
 
 ```bash
-mvn clean package
+mvn -B clean package
 kubectl apply -f deploy/k8s/namespace.yaml
 kubectl apply -f deploy/k8s/secrets.yaml
 kubectl apply -f deploy/k8s/configmap.yaml
@@ -183,30 +191,48 @@ kubectl apply -f deploy/k8s/apps.yaml
 kubectl get pods -n ecommerce
 ```
 
-More detailed Minikube/Kind instructions are available in `deploy/k8s/README.md`.
+For Minikube/Kind image-build and port-forwarding details, see [`deploy/k8s/README.md`](deploy/k8s/README.md).
 
-## Project Status
+> The Kubernetes files are designed for local learning and demonstration. Before a real deployment, replace demo secrets, provide persistent storage, configure an ingress/TLS, use managed backing services where appropriate, and configure the Config Server endpoint for in-cluster DNS.
 
-Already implemented:
+## Testing and CI
 
-- Multi-module Maven structure
-- Service discovery with Eureka
-- Centralized config with Spring Cloud Config
-- Gateway routing
-- Keycloak-based JWT resource server setup
-- Database per service
-- Kafka order event publishing/consuming
-- Redis-based gateway rate limiting
-- Resilience4j circuit breaker for product route
-- Actuator, Prometheus metrics, Zipkin tracing
-- Docker Compose environment
-- Kubernetes manifests for local deployment
-- Unit tests for core services
-- GitHub Actions CI
+```bash
+mvn test
+```
 
-Planned improvements:
+The repository contains focused unit tests for product, user, cart, and order business logic. They use JUnit 5, Mockito, and AssertJ to verify such cases as soft deletion, cart validation, order-event publication, and user provisioning orchestration.
 
-- More detailed Swagger annotations and JWT auth scheme in OpenAPI
-- Testcontainers integration tests
-- Database migrations with Flyway or Liquibase
-- Docker image publishing pipeline
+GitHub Actions runs `mvn -B clean verify` on pushes to `main`/`master` and on pull requests.
+
+## Repository layout
+
+```text
+.
+├── configserver/       # Centralized configuration service and service configs
+├── eureka/             # Service registry
+├── gateway/            # Reactive API gateway and security
+├── product/            # Product catalog service
+├── user/               # User profiles and Keycloak administration
+├── order/              # Cart, checkout, inter-service clients, Kafka publisher
+├── notification/       # Kafka order-event consumer
+├── deploy/
+│   ├── docker/         # Docker Compose runtime stack
+│   └── k8s/            # Local Kubernetes manifests
+└── additional/         # Keycloak export and Prometheus/Loki exploration configs
+```
+
+## Current scope and next steps
+
+This is an educational, backend-only portfolio project rather than a production e-commerce product. The next changes that would most improve production readiness are:
+
+- Add Flyway or Liquibase migrations and remove Hibernate schema creation from runtime setup.
+- Automate Keycloak realm import and provide a committed `.env.example` with non-sensitive defaults.
+- Add integration tests with Testcontainers for PostgreSQL, MySQL, MongoDB, Kafka, and Keycloak.
+- Derive `X-User-ID` from the authenticated JWT instead of accepting it as a client-supplied header.
+- Add stock reservation, idempotency, and transactional/outbox handling around checkout.
+- Publish versioned Docker images in CI and deploy with Helm/Kustomize plus external secrets.
+
+## What this project demonstrates
+
+This repository demonstrates hands-on work with Java 21, Spring Boot, Spring Cloud architecture patterns, REST API design and validation, relational and document databases, service-to-service communication, event-driven messaging, OAuth2/OIDC security, resilience patterns, observability, Docker, Kubernetes, automated testing, and CI.
